@@ -1,3 +1,4 @@
+// src/pages/Room.jsx
 import React, {
   useEffect,
   useRef,
@@ -20,6 +21,7 @@ const Room = () => {
   const peersRef = useRef({}); // { socketId: RTCPeerConnection }
   const [remoteUsers, setRemoteUsers] = useState({}); // { socketId: { stream, name } }
   const [localName] = useState(localStorage.getItem('userName') || 'You');
+  const [allUsers, setAllUsers] = useState([localName]); // keep all users who ever joined
 
   useEffect(() => {
     let localStream;
@@ -27,39 +29,42 @@ const Room = () => {
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then((stream) => {
         localStream = stream;
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
+        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-        // JOIN ROOM WITH NAME
-        socket.emit('join-room', {
-          roomId,
-          name: localName,
-        });
+        // Join room with name
+        socket.emit('join-room', { roomId, name: localName });
 
-        // We are new → server sends all existing users
+        // Server sends all existing users
         socket.on('all-users', (users) => {
-          users.forEach((user) => {
-            const { socketId, name } = user;
+          users.forEach(({ socketId, name }) => {
             const peer = createPeer(socketId, stream);
             peersRef.current[socketId] = peer;
 
-            // Store name (stream will come ontrack)
             setRemoteUsers((prev) => ({
               ...prev,
               [socketId]: { ...(prev[socketId] || {}), name },
             }));
+
+            setAllUsers((prev) => {
+              if (!prev.includes(name)) return [...prev, name];
+              return prev;
+            });
           });
         });
 
-        // Another user joined after us
+        // Another user joined
         socket.on('user-joined', ({ socketId, name }) => {
-          console.log('User joined:', socketId, name);
-          // we wait for their offer; we just save their name for now
           setRemoteUsers((prev) => ({
             ...prev,
             [socketId]: { ...(prev[socketId] || {}), name },
           }));
+
+          setAllUsers((prev) => {
+            if (!prev.includes(name)) return [...prev, name];
+            return prev;
+          });
+
+          console.log('User joined:', name);
         });
 
         socket.on('offer', handleReceiveOffer(stream));
@@ -67,11 +72,13 @@ const Room = () => {
         socket.on('ice-candidate', handleNewICECandidate);
         socket.on('user-left', handleUserLeft);
       })
-      .catch((err) => {
-        console.error('Error accessing media devices', err);
-      });
+      .catch((err) => console.error('Error accessing media devices:', err));
 
     return () => {
+      // Leave room properly
+      socket.emit('leave-room', roomId);
+
+      // Remove all socket listeners
       socket.off('all-users');
       socket.off('user-joined');
       socket.off('offer');
@@ -79,10 +86,18 @@ const Room = () => {
       socket.off('ice-candidate');
       socket.off('user-left');
 
+      // Close all peer connections
       Object.values(peersRef.current).forEach((peer) => peer.close());
       if (localStream) localStream.getTracks().forEach((t) => t.stop());
     };
   }, [roomId, localName]);
+
+  // Log all users currently in room whenever remoteUsers change
+  useEffect(() => {
+    const names = Object.values(remoteUsers).map(u => u.name || 'Unknown');
+    console.log('Users currently in room:', [localName, ...names]);
+    console.log('All users who joined:', allUsers);
+  }, [remoteUsers, localName, allUsers]);
 
   const createPeer = (targetId, stream) => {
     const peer = new RTCPeerConnection({
@@ -93,10 +108,7 @@ const Room = () => {
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
-        socket.emit('ice-candidate', {
-          target: targetId,
-          candidate: e.candidate,
-        });
+        socket.emit('ice-candidate', { target: targetId, candidate: e.candidate });
       }
     };
 
@@ -111,10 +123,7 @@ const Room = () => {
     peer.onnegotiationneeded = async () => {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      socket.emit('offer', {
-        target: targetId,
-        sdp: peer.localDescription,
-      });
+      socket.emit('offer', { target: targetId, sdp: peer.localDescription });
     };
 
     return peer;
@@ -126,15 +135,11 @@ const Room = () => {
     });
 
     peersRef.current[caller] = peer;
-
     stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
-        socket.emit('ice-candidate', {
-          target: caller,
-          candidate: e.candidate,
-        });
+        socket.emit('ice-candidate', { target: caller, candidate: e.candidate });
       }
     };
 
@@ -150,17 +155,13 @@ const Room = () => {
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
 
-    socket.emit('answer', {
-      target: caller,
-      sdp: peer.localDescription,
-    });
+    socket.emit('answer', { target: caller, sdp: peer.localDescription });
   };
 
   const handleReceiveAnswer = async ({ sdp, caller }) => {
     const peer = peersRef.current[caller];
     if (!peer) return;
-    const desc = new RTCSessionDescription(sdp);
-    await peer.setRemoteDescription(desc);
+    await peer.setRemoteDescription(new RTCSessionDescription(sdp));
   };
 
   const handleNewICECandidate = async ({ candidate, from }) => {
@@ -175,10 +176,9 @@ const Room = () => {
 
   const handleUserLeft = (socketId) => {
     const peer = peersRef.current[socketId];
-    if (peer) {
-      peer.close();
-      delete peersRef.current[socketId];
-    }
+    if (peer) peer.close();
+    delete peersRef.current[socketId];
+
     setRemoteUsers((prev) => {
       const copy = { ...prev };
       delete copy[socketId];
@@ -189,23 +189,15 @@ const Room = () => {
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4">
       <h2 className="text-xl font-semibold mb-4">Room: {roomId}</h2>
-      <h2 className="text-xl font-semibold mb-4">Back  <Link to="/" className="text-indigo-400 hover:underline">
-            Home Back 
-          </Link></h2>
+      <h2 className="text-xl font-semibold mb-4">
+        Back <Link to="/" className="text-indigo-400 hover:underline">Home</Link>
+      </h2>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {/* Local video */}
         <div className="relative">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full aspect-video bg-black rounded-xl"
-          />
-          <span className="absolute bottom-2 left-2 text-xs bg-black/60 px-2 py-1 rounded">
-            {localName}
-          </span>
+          <video ref={localVideoRef} autoPlay playsInline muted className="w-full aspect-video bg-black rounded-xl" />
+          <span className="absolute bottom-2 left-2 text-xs bg-black/60 px-2 py-1 rounded">{localName}</span>
         </div>
 
         {/* Remote videos */}
@@ -219,29 +211,16 @@ const Room = () => {
 
 const VideoTile = ({ stream, name }) => {
   const ref = useRef(null);
-
   useEffect(() => {
-    if (ref.current && stream) {
-      ref.current.srcObject = stream;
-    }
+    if (ref.current && stream) ref.current.srcObject = stream;
   }, [stream]);
 
   return (
     <div className="relative">
-      <video
-        ref={ref}
-        autoPlay
-        playsInline
-        className="w-full aspect-video bg-black rounded-xl"
-      />
-      <span className="absolute bottom-2 left-2 text-xs bg-black/60 px-2 py-1 rounded">
-        {name}
-      </span>
+      <video ref={ref} autoPlay playsInline className="w-full aspect-video bg-black rounded-xl" />
+      <span className="absolute bottom-2 left-2 text-xs bg-black/60 px-2 py-1 rounded">{name}</span>
     </div>
   );
 };
 
 export default Room;
-
-
-

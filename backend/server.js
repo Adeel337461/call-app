@@ -10,20 +10,18 @@ import userRouter from './routes/auth.route.js';
 dotenv.config();
 const app = express();
 
-// --- HTTP SERVER WRAPPER ---
 const server = http.createServer(app);
 
-// --- SOCKET.IO SERVER ---
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL,
+    origin: process.env.FRONTEND_URL, // http://localhost:5173
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
-// Simple in-memory room tracking – good enough for learning
-const rooms = {}; // roomId -> [socketIds]
+// Simple in-memory room tracking
+const rooms = {};
 
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
@@ -36,12 +34,10 @@ io.on("connection", (socket) => {
     rooms[roomId].push({ socketId: socket.id, name });
     socket.join(roomId);
 
-    const otherUsers = rooms[roomId].filter(u => u.socketId !== socket.id);
+    const otherUsers = rooms[roomId].filter((u) => u.socketId !== socket.id);
 
-    // Send all existing users (with name) to the new user
     socket.emit("all-users", otherUsers);
 
-    // Notify existing users that a new user joined
     otherUsers.forEach((user) => {
       io.to(user.socketId).emit("user-joined", {
         socketId: socket.id,
@@ -49,7 +45,17 @@ io.on("connection", (socket) => {
       });
     });
   });
-  
+
+  // OPTIONAL: handle leave-room to clean up manually
+  socket.on("leave-room", (roomId) => {
+    console.log(`Socket ${socket.id} leaving room ${roomId}`);
+    if (rooms[roomId]) {
+      rooms[roomId] = rooms[roomId].filter((u) => u.socketId !== socket.id);
+      io.to(roomId).emit("user-left", socket.id);
+      if (rooms[roomId].length === 0) delete rooms[roomId];
+    }
+    socket.leave(roomId);
+  });
 
   socket.on("offer", ({ target, sdp }) => {
     io.to(target).emit("offer", { sdp, caller: socket.id });
@@ -71,7 +77,6 @@ io.on("connection", (socket) => {
       rooms[roomId] = rooms[roomId].filter((u) => u.socketId !== socket.id);
 
       if (before !== rooms[roomId].length) {
-        // someone left this room → notify others
         io.to(roomId).emit("user-left", socket.id);
       }
 
@@ -82,11 +87,10 @@ io.on("connection", (socket) => {
   });
 });
 
-// --- EXPRESS MIDDLEWARE ---
 app.use(
   cors({
     credentials: true,
-    origin: process.env.FRONTEND_URL,
+    origin: process.env.FRONTEND_URL, // same as above
   }),
 );
 
@@ -99,7 +103,6 @@ app.get("/", (req, res) => {
 
 app.use("/api/user", userRouter);
 
-// --- START SERVER ---
 const PORT = process.env.PORT || 3000;
 
 connectDB().then(() => {

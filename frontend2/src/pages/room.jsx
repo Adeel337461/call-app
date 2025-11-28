@@ -11,8 +11,20 @@ import {
 } from 'react-router-dom';
 import { io } from 'socket.io-client';
 
-const socket = io(import.meta.env.VITE_BACKEND_URL, {
+const socket = io(import.meta.env.VITE_API_URL, {
   withCredentials: true,
+});
+//bug logs:
+socket.on("connect", () => {
+  console.log("✅ Socket connected:", socket.id);
+});
+
+socket.on("connect_error", (err) => {
+  console.error("❌ Socket connect_error:", err.message, err);
+});
+
+socket.on("disconnect", (reason) => {
+  console.log("⚠️ Socket disconnected:", reason);
 });
 
 const Room = () => {

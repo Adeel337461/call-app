@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { jwtDecode } from 'jwt-decode'; // Use this import
+import * as jwtDecode from 'jwt-decode';
 import {
   Navigate,
   Outlet,
@@ -14,7 +14,7 @@ const ProtectedRoute = ({ children }) => {
   }
 
   try {
-    const decoded = jwtDecode(token); // call directly
+const decoded = jwtDecode.default(token);
     const isExpired = decoded.exp * 1000 < Date.now();
 
     if (isExpired) {

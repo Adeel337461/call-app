@@ -23,8 +23,8 @@ const decoded = jwtDecode.default(token);
     }
   } catch (err) {
     console.error("JWT decode error:", err);
-    localStorage.removeItem('accesstoken');
-    return <Navigate to="/login" replace />;
+    // localStorage.removeItem('accesstoken');
+    // return <Navigate to="/login" replace />;
   }
 
   if (children) return children;

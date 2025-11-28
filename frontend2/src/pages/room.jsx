@@ -190,7 +190,7 @@ const Room = () => {
     <div className="min-h-screen bg-slate-900 text-white p-4">
       <h2 className="text-xl font-semibold mb-4">Room: {roomId}</h2>
       <h2 className="text-xl font-semibold mb-4">Back  <Link to="/" className="text-indigo-400 hover:underline">
-            Home
+            Home Back 
           </Link></h2>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">

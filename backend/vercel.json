@@ -1,9 +1,9 @@
 {
     "version" : 2,
-    "name" : "Ecommerce",
+    "name" : "Call APP",
     "builds" : [
         {
-            "src" : "./index.js",
+            "src" : "./server.js",
             "use" : "@vercel/node"
         }
     ],

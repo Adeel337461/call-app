@@ -11,11 +11,13 @@ import {
 } from 'react-router-dom';
 import { io } from 'socket.io-client';
 
-const socket = io(import.meta.env.VITE_BACKEND_URL, {
+const env_v = 'https://call-app-444q.vercel.app';
+// const env_v = 'http://localhost:5173';
+const socket = io(env_v, {
   withCredentials: true,
 });
 console.log(socket)
-console.log('env',import.meta.env.VITE_BACKEND_URL);
+console.log('env',env_v);
 
 const Room = () => {
   const { roomId } = useParams();

@@ -1,6 +1,6 @@
 import React from 'react';
 
-import * as jwt_decode from 'jwt-decode'; // Vite-compatible import
+import { jwtDecode } from 'jwt-decode'; // Use this import
 import {
   Navigate,
   Outlet,
@@ -14,7 +14,7 @@ const ProtectedRoute = ({ children }) => {
   }
 
   try {
-    const decoded = jwt_decode.default(token); // note .default for Vite
+    const decoded = jwtDecode(token); // call directly
     const isExpired = decoded.exp * 1000 < Date.now();
 
     if (isExpired) {
@@ -22,6 +22,7 @@ const ProtectedRoute = ({ children }) => {
       return <Navigate to="/login" replace />;
     }
   } catch (err) {
+    console.error("JWT decode error:", err);
     localStorage.removeItem('accesstoken');
     return <Navigate to="/login" replace />;
   }

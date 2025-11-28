@@ -14,13 +14,14 @@ import { io } from 'socket.io-client';
 const socket = io(import.meta.env.VITE_BACKEND_URL, {
   withCredentials: true,
 });
+console.log(socket)
 
 const Room = () => {
   const { roomId } = useParams();
   const localVideoRef = useRef(null);
   const peersRef = useRef({}); // { socketId: RTCPeerConnection }
   const [remoteUsers, setRemoteUsers] = useState({}); // { socketId: { stream, name } }
-  const [localName] = useState(localStorage.getItem('userName') || 'You');
+  const [localName] = useState(localStorage.getItem("userName") || "You");
   const [allUsers, setAllUsers] = useState([localName]); // keep all users who ever joined
 
   useEffect(() => {
@@ -32,10 +33,10 @@ const Room = () => {
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
         // Join room with name
-        socket.emit('join-room', { roomId, name: localName });
+        socket.emit("join-room", { roomId, name: localName });
 
         // Server sends all existing users
-        socket.on('all-users', (users) => {
+        socket.on("all-users", (users) => {
           users.forEach(({ socketId, name }) => {
             const peer = createPeer(socketId, stream);
             peersRef.current[socketId] = peer;
@@ -53,7 +54,7 @@ const Room = () => {
         });
 
         // Another user joined
-        socket.on('user-joined', ({ socketId, name }) => {
+        socket.on("user-joined", ({ socketId, name }) => {
           setRemoteUsers((prev) => ({
             ...prev,
             [socketId]: { ...(prev[socketId] || {}), name },
@@ -64,27 +65,27 @@ const Room = () => {
             return prev;
           });
 
-          console.log('User joined:', name);
+          console.log("User joined:", name);
         });
 
-        socket.on('offer', handleReceiveOffer(stream));
-        socket.on('answer', handleReceiveAnswer);
-        socket.on('ice-candidate', handleNewICECandidate);
-        socket.on('user-left', handleUserLeft);
+        socket.on("offer", handleReceiveOffer(stream));
+        socket.on("answer", handleReceiveAnswer);
+        socket.on("ice-candidate", handleNewICECandidate);
+        socket.on("user-left", handleUserLeft);
       })
-      .catch((err) => console.error('Error accessing media devices:', err));
+      .catch((err) => console.error("Error accessing media devices:", err));
 
     return () => {
       // Leave room properly
-      socket.emit('leave-room', roomId);
+      socket.emit("leave-room", roomId);
 
       // Remove all socket listeners
-      socket.off('all-users');
-      socket.off('user-joined');
-      socket.off('offer');
-      socket.off('answer');
-      socket.off('ice-candidate');
-      socket.off('user-left');
+      socket.off("all-users");
+      socket.off("user-joined");
+      socket.off("offer");
+      socket.off("answer");
+      socket.off("ice-candidate");
+      socket.off("user-left");
 
       // Close all peer connections
       Object.values(peersRef.current).forEach((peer) => peer.close());
@@ -94,21 +95,21 @@ const Room = () => {
 
   // Log all users currently in room whenever remoteUsers change
   useEffect(() => {
-    const names = Object.values(remoteUsers).map(u => u.name || 'Unknown');
-    console.log('Users currently in room:', [localName, ...names]);
-    console.log('All users who joined:', allUsers);
+    const names = Object.values(remoteUsers).map(u => u.name || "Unknown");
+    console.log("Users currently in room:", [localName, ...names]);
+    console.log("All users who joined:", allUsers);
   }, [remoteUsers, localName, allUsers]);
 
   const createPeer = (targetId, stream) => {
     const peer = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
     stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
-        socket.emit('ice-candidate', { target: targetId, candidate: e.candidate });
+        socket.emit("ice-candidate", { target: targetId, candidate: e.candidate });
       }
     };
 
@@ -123,7 +124,7 @@ const Room = () => {
     peer.onnegotiationneeded = async () => {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      socket.emit('offer', { target: targetId, sdp: peer.localDescription });
+      socket.emit("offer", { target: targetId, sdp: peer.localDescription });
     };
 
     return peer;
@@ -131,7 +132,7 @@ const Room = () => {
 
   const handleReceiveOffer = (stream) => async ({ sdp, caller }) => {
     const peer = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
     peersRef.current[caller] = peer;
@@ -139,7 +140,7 @@ const Room = () => {
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
-        socket.emit('ice-candidate', { target: caller, candidate: e.candidate });
+        socket.emit("ice-candidate", { target: caller, candidate: e.candidate });
       }
     };
 
@@ -155,7 +156,7 @@ const Room = () => {
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
 
-    socket.emit('answer', { target: caller, sdp: peer.localDescription });
+    socket.emit("answer", { target: caller, sdp: peer.localDescription });
   };
 
   const handleReceiveAnswer = async ({ sdp, caller }) => {
@@ -170,7 +171,7 @@ const Room = () => {
     try {
       await peer.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
-      console.error('Error adding ICE candidate', err);
+      console.error("Error adding ICE candidate", err);
     }
   };
 

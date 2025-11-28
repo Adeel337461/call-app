@@ -5,6 +5,7 @@ import React, {
   useState,
 } from 'react';
 
+import toast from 'react-hot-toast';
 import {
   Link,
   useParams,
@@ -14,7 +15,7 @@ import { io } from 'socket.io-client';
 const socket = io(import.meta.env.VITE_API_URL, {
   withCredentials: true,
 });
-//bug logs:
+// bug logs:
 socket.on("connect", () => {
   console.log("✅ Socket connected:", socket.id);
 });
@@ -31,7 +32,7 @@ const Room = () => {
   const { roomId } = useParams();
   const localVideoRef = useRef(null);
   const peersRef = useRef({});
-  const [remoteUsers, setRemoteUsers] = useState({}); 
+  const [remoteUsers, setRemoteUsers] = useState({});
   const [localName] = useState(localStorage.getItem("userName") || "You");
   const [allUsers, setAllUsers] = useState([localName]);
 
@@ -190,10 +191,29 @@ const Room = () => {
       return copy;
     });
   };
-
+  const handleCopyRoomLink = async () => {
+    try {
+      const roomLink = roomId;
+      await navigator.clipboard.writeText(roomLink);
+      // Replace this with your toast:
+      // toast.success("Room link copied!");
+      toast.success(" Room link copied:");
+    } catch (err) {
+      toast.error("Failed to copy room link");
+      // toast.error("Failed to copy");
+    }
+  };
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4">
-      <h2 className="text-xl font-semibold mb-4">Room: {roomId}</h2>
+      <h2 className="text-xl font-semibold mb-4">
+        Room: {roomId}{" "}
+        <button
+          onClick={handleCopyRoomLink}
+          className="text-sm bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded-lg"
+        >
+          Copy room link
+        </button>
+      </h2>
       <h2 className="text-xl font-semibold mb-4">
         Back <Link to="/" className="text-indigo-400 hover:underline">Home</Link>
       </h2>

@@ -11,21 +11,17 @@ import {
 } from 'react-router-dom';
 import { io } from 'socket.io-client';
 
-const env_v = 'https://call-app-444q.vercel.app';
-// const env_v = 'http://localhost:5173';
-const socket = io(env_v, {
+const socket = io('http://localhost:5173', {
   withCredentials: true,
 });
-console.log(socket)
-console.log('env',env_v);
 
 const Room = () => {
   const { roomId } = useParams();
   const localVideoRef = useRef(null);
-  const peersRef = useRef({}); // { socketId: RTCPeerConnection }
-  const [remoteUsers, setRemoteUsers] = useState({}); // { socketId: { stream, name } }
+  const peersRef = useRef({});
+  const [remoteUsers, setRemoteUsers] = useState({}); 
   const [localName] = useState(localStorage.getItem("userName") || "You");
-  const [allUsers, setAllUsers] = useState([localName]); // keep all users who ever joined
+  const [allUsers, setAllUsers] = useState([localName]);
 
   useEffect(() => {
     let localStream;
@@ -35,10 +31,8 @@ const Room = () => {
         localStream = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-        // Join room with name
         socket.emit("join-room", { roomId, name: localName });
 
-        // Server sends all existing users
         socket.on("all-users", (users) => {
           users.forEach(({ socketId, name }) => {
             const peer = createPeer(socketId, stream);
@@ -56,7 +50,6 @@ const Room = () => {
           });
         });
 
-        // Another user joined
         socket.on("user-joined", ({ socketId, name }) => {
           setRemoteUsers((prev) => ({
             ...prev,
@@ -79,10 +72,8 @@ const Room = () => {
       .catch((err) => console.error("Error accessing media devices:", err));
 
     return () => {
-      // Leave room properly
       socket.emit("leave-room", roomId);
 
-      // Remove all socket listeners
       socket.off("all-users");
       socket.off("user-joined");
       socket.off("offer");
@@ -90,13 +81,11 @@ const Room = () => {
       socket.off("ice-candidate");
       socket.off("user-left");
 
-      // Close all peer connections
       Object.values(peersRef.current).forEach((peer) => peer.close());
       if (localStream) localStream.getTracks().forEach((t) => t.stop());
     };
   }, [roomId, localName]);
 
-  // Log all users currently in room whenever remoteUsers change
   useEffect(() => {
     const names = Object.values(remoteUsers).map(u => u.name || "Unknown");
     console.log("Users currently in room:", [localName, ...names]);
@@ -198,13 +187,11 @@ const Room = () => {
       </h2>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {/* Local video */}
         <div className="relative">
           <video ref={localVideoRef} autoPlay playsInline muted className="w-full aspect-video bg-black rounded-xl" />
           <span className="absolute bottom-2 left-2 text-xs bg-black/60 px-2 py-1 rounded">{localName}</span>
         </div>
 
-        {/* Remote videos */}
         {Object.entries(remoteUsers).map(([socketId, { stream, name }]) => (
           <VideoTile key={socketId} stream={stream} name={name || socketId} />
         ))}

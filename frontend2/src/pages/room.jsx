@@ -15,6 +15,7 @@ const socket = io(import.meta.env.VITE_BACKEND_URL, {
   withCredentials: true,
 });
 console.log(socket)
+console.log('env',import.meta.env.VITE_BACKEND_URL);
 
 const Room = () => {
   const { roomId } = useParams();

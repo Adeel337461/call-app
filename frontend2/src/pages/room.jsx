@@ -4,7 +4,10 @@ import React, {
   useState,
 } from 'react';
 
-import { useParams } from 'react-router-dom';
+import {
+  Link,
+  useParams,
+} from 'react-router-dom';
 import { io } from 'socket.io-client';
 
 const socket = io(import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000', {
@@ -19,44 +22,67 @@ const Room = () => {
   const [localName] = useState(localStorage.getItem('userName') || 'You');
 
   useEffect(() => {
-  let localStream;
+    let localStream;
 
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then((stream) => {
-      localStream = stream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then((stream) => {
+        localStream = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
 
-      // JOIN ROOM WITH NAME
-      socket.emit('join-room', {
-        roomId,
-        name: localName,
+        // JOIN ROOM WITH NAME
+        socket.emit('join-room', {
+          roomId,
+          name: localName,
+        });
+
+        // We are new → server sends all existing users
+        socket.on('all-users', (users) => {
+          users.forEach((user) => {
+            const { socketId, name } = user;
+            const peer = createPeer(socketId, stream);
+            peersRef.current[socketId] = peer;
+
+            // Store name (stream will come ontrack)
+            setRemoteUsers((prev) => ({
+              ...prev,
+              [socketId]: { ...(prev[socketId] || {}), name },
+            }));
+          });
+        });
+
+        // Another user joined after us
+        socket.on('user-joined', ({ socketId, name }) => {
+          console.log('User joined:', socketId, name);
+          // we wait for their offer; we just save their name for now
+          setRemoteUsers((prev) => ({
+            ...prev,
+            [socketId]: { ...(prev[socketId] || {}), name },
+          }));
+        });
+
+        socket.on('offer', handleReceiveOffer(stream));
+        socket.on('answer', handleReceiveAnswer);
+        socket.on('ice-candidate', handleNewICECandidate);
+        socket.on('user-left', handleUserLeft);
+      })
+      .catch((err) => {
+        console.error('Error accessing media devices', err);
       });
 
-      // ... existing socket.on handlers ...
-    })
-    .catch((err) => console.error(err));
+    return () => {
+      socket.off('all-users');
+      socket.off('user-joined');
+      socket.off('offer');
+      socket.off('answer');
+      socket.off('ice-candidate');
+      socket.off('user-left');
 
-  return () => {
-    // Stop tracks
-    if (localStream) localStream.getTracks().forEach((t) => t.stop());
-
-    // Close all peer connections
-    Object.values(peersRef.current).forEach((peer) => peer.close());
-
-    // Emit leave-room to server
-    socket.emit('leave-room', roomId);
-
-    // Remove event listeners
-    socket.off('all-users');
-    socket.off('user-joined');
-    socket.off('offer');
-    socket.off('answer');
-    socket.off('ice-candidate');
-    socket.off('user-left');
-  };
-}, [roomId, localName]);
+      Object.values(peersRef.current).forEach((peer) => peer.close());
+      if (localStream) localStream.getTracks().forEach((t) => t.stop());
+    };
+  }, [roomId, localName]);
 
   const createPeer = (targetId, stream) => {
     const peer = new RTCPeerConnection({
@@ -163,9 +189,9 @@ const Room = () => {
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4">
       <h2 className="text-xl font-semibold mb-4">Room: {roomId}</h2>
-      <h2 className="text-xl font-semibold mb-4">Back  <a href="/" className="text-indigo-400 hover:underline">
+      <h2 className="text-xl font-semibold mb-4">Back  <Link to="/" className="text-indigo-400 hover:underline">
             Home
-          </a></h2>
+          </Link></h2>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {/* Local video */}
@@ -216,3 +242,6 @@ const VideoTile = ({ stream, name }) => {
 };
 
 export default Room;
+
+
+
